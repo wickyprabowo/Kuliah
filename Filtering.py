@@ -1,42 +1,112 @@
-import numpy as np
+import math
+import operator
 import pandas as pd
 from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.model_selection import train_test_split
-from sklearn.naive_bayes import MultinomialNB
+from sklearn.neighbors.classification import KNeighborsClassifier
 from Sastrawi.StopWordRemover.StopWordRemoverFactory import StopWordRemoverFactory
+from Sastrawi.Stemmer.StemmerFactory import StemmerFactory
 
 df = pd.read_csv('dataset_sms_spam _v1.csv', skiprows=1, names=['Message', 'Status'])
-idn_stopWord = StopWordRemoverFactory().get_stop_words()
 
+#regex menghilangkan simbol, link, dan kata double
 df_message = df["Message"].replace(r'http\S+', '', regex=True)\
     .replace(r'www\S+', '', regex=True)\
     .replace(r'tsel\S+', '', regex=True)\
     .replace(r'[-*#:]?([\d]+([^ ]?[a-zA-Z_/]*))+', '', regex=True)\
-    .replace(r'\s([a-cA-C])\1', '', regex=True)
-
+    .replace(r'\s([a-zA-Z])\1+\s', '', regex=True)
 df_status = df["Status"]
+
+#membagi message sesuai dengan kelasnya
+df_message_0 = df_message[df["Status"] == 0]
+df_status_0 = df_status[df["Status"] == 0]
+message0_train, message0_test, status0_train, status0_test = train_test_split(df_message_0, df_status_0, test_size=0.2, random_state=4)
+
+df_message_1 = df_message[df["Status"] == 1]
+df_status_1 = df_status[df["Status"] == 1]
+message1_train, message1_test, status1_train, status1_test = train_test_split(df_message_1, df_status_1, test_size=0.2, random_state=4)
+
+df_message_2 = df_message[df["Status"] == 2]
+df_status_2 = df_status[df["Status"] == 2]
+message2_train, message2_test, status2_train, status2_test = train_test_split(df_message_2, df_status_2, test_size=0.2, random_state=4)
+
+#menggabungkan 80% message dn 20% train
+df_message_train = pd.concat([message0_train, message1_train, message2_train])
+df_status_train = pd.concat([status0_train, status1_train, status2_train])
+
+df_message_test = pd.concat([message0_test, message1_test, message2_test])
+df_status_test = pd.concat([status0_test, status1_test, status2_test])
+
+#StopWord
+new_stopWord = ['abis', 'ad', 'adminlte', 'advertising', 'advice', 'aesthetic', 'ah', ]
+idn_stopWord = StopWordRemoverFactory().get_stop_words()+new_stopWord
+
+#Stemming
+stemming = StemmerFactory().create_stemmer()
+analyzer = CountVectorizer().build_analyzer()
+def stemmed_words(doc):
+    return (stemming.stem(w) for w in analyzer(doc))
+
 #reLink = ('((www.)[0-9a-z\./_+\(\)\$\#\&\!\?]+)')
 #reNumber = '[-*#:]?([\d]+([^ ]?[a-zA-Z/]*))+'
-reWord = '[a-z]+'
+#reWord = '[a-z]+'
 
-message_train, message_test, status_train, status_test = train_test_split(df_message, df_status, test_size=0.2, random_state=4)
-
-cv = CountVectorizer(stop_words = idn_stopWord)
-
-message_traincv = cv.fit_transform(message_train)
+cv = TfidfVectorizer(stop_words = idn_stopWord)
+message_train_cv = cv.fit_transform(df_message_train)
 getFitur = cv.get_feature_names()
-a = message_traincv.toarray()
+a = message_train_cv.toarray()
 
-#print(getFitur)
-#print(len(getFitur))
-#print(idn_stopWord)
-#print(len(idn_stopWord))
-#print(cv.inverse_transform(message_test))
-#print(status_train)
-#print(df_message_split_getValue)
+message_test_cv = cv.transform(df_message_test)
+b = message_test_cv.toarray()
+
+#clasification
+def cosineSimilarity (testData, trainingData):
+    distance = 0
+    penyebutCosineTest = 0
+    penyebutCosineTrain = 0
+    pembilangCosine = 0
+    for i in range(len(getFitur)):
+        pembilangCosine += (testData.item(i) * trainingData.item(i))
+        penyebutCosineTest += pow(testData.item(i),2)
+        penyebutCosineTrain += pow(trainingData.item(i),2)
+    distance = 1 - (pembilangCosine/(math.sqrt(penyebutCosineTest) * math.sqrt(penyebutCosineTrain)))
+    return distance
+
+def getKNN(setTestData, setTrainingData, k):
+    distance = []
+    neighbors = []
+    testData = 2
+    for i in range(testData):
+        for j in range(len(setTrainingData)):
+            dist = cosineSimilarity(setTestData[i], setTrainingData[j])
+            distance.append((setTrainingData[j], dist))
+        distance.sort(key=operator.itemgetter(1))
+        for l in range(k):
+            neighbors.append(distance[l])
+    return neighbors
+
+knn = getKNN(b, a, 1)
+print(knn)
 
 
 
+'''clasification = KNeighborsClassifier(n_neighbors=3)
+message_train_clasification = clasification.fit(message_train_cv, df_status_train)
+
+accuracy = clasification.score(message_test_cv, df_status_test)
+
+prediction = clasification.predict(message_test_cv)
+
+print(df_message_test)
+print(prediction)
+print('\n', "DATA TRAINING : ")
+print(df_message_train, '\n', df_status_train)
+print('\n', "DATA TEST : ")
+print(df_message_test, '\n', df_status_test)
+print('\n', "FEATURE OF DATA TRAINING : ")
+print(getFitur, '\n', len(getFitur))
+print(idn_stopWord)'''
 
 
 
