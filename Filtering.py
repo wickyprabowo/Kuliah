@@ -39,8 +39,7 @@ df_message_test = pd.concat([message0_test, message1_test, message2_test])
 df_status_test = pd.concat([status0_test, status1_test, status2_test])
 
 #StopWord
-new_stopWord = ['abis', 'ad', 'adminlte', 'advertising', 'advice', 'aesthetic', 'ah', ]
-idn_stopWord = StopWordRemoverFactory().get_stop_words()+new_stopWord
+idn_stopWord = StopWordRemoverFactory().get_stop_words()
 
 #Stemming
 stemming = StemmerFactory().create_stemmer()
@@ -48,17 +47,11 @@ analyzer = CountVectorizer().build_analyzer()
 def stemmed_words(doc):
     return (stemming.stem(w) for w in analyzer(doc))
 
-#reLink = ('((www.)[0-9a-z\./_+\(\)\$\#\&\!\?]+)')
-#reNumber = '[-*#:]?([\d]+([^ ]?[a-zA-Z/]*))+'
-#reWord = '[a-z]+'
+cv = TfidfVectorizer(stop_words = idn_stopWord, analyzer=stemmed_words)
 
-cv = TfidfVectorizer(stop_words = idn_stopWord)
 message_train_cv = cv.fit_transform(df_message_train)
 getFitur = cv.get_feature_names()
 a = message_train_cv.toarray()
-
-message_test_cv = cv.transform(df_message_test)
-b = message_test_cv.toarray()
 
 #clasification
 def cosineSimilarity (testData, trainingData):
@@ -73,22 +66,35 @@ def cosineSimilarity (testData, trainingData):
     distance = 1 - (pembilangCosine/(math.sqrt(penyebutCosineTest) * math.sqrt(penyebutCosineTrain)))
     return distance
 
-def getKNN(setTestData, setTrainingData, k):
+def kNearestNeighbor(setTestData, setTrainingData, k):
     distance = []
     neighbors = []
-    testData = 2
-    for i in range(testData):
+    #testData = 1
+    for i in range(len(setTestData)):
         for j in range(len(setTrainingData)):
             dist = cosineSimilarity(setTestData[i], setTrainingData[j])
-            distance.append((setTrainingData[j], dist))
+            distance.append((df_status_train.iloc[j], dist))
         distance.sort(key=operator.itemgetter(1))
         for l in range(k):
             neighbors.append(distance[l])
-    return neighbors
+    if k == 1 :
+        return neighbors[0][0]
+    else:
+        vote = {}
+        for x in range(len(neighbors)):
+            response = neighbors[x][0]
+            if response in vote:
+                vote[response] += 1
+            else:
+                vote[response] = 1
+        sortedVotes = sorted(vote.items(), key=operator.itemgetter(1), reverse=True)
+        return sortedVotes
 
-knn = getKNN(b, a, 1)
+new_message = ["aku sedang sakit hari ini"]
+message_test_cv = cv.transform(new_message)
+b = message_test_cv.toarray()
+knn = kNearestNeighbor(b, a, 10)
 print(knn)
-
 
 
 '''clasification = KNeighborsClassifier(n_neighbors=3)
@@ -107,6 +113,3 @@ print(df_message_test, '\n', df_status_test)
 print('\n', "FEATURE OF DATA TRAINING : ")
 print(getFitur, '\n', len(getFitur))
 print(idn_stopWord)'''
-
-
-
