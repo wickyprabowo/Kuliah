@@ -1,22 +1,42 @@
 import math
 import operator
 import pandas as pd
-from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.model_selection import train_test_split
 from sklearn.neighbors.classification import KNeighborsClassifier
 from Sastrawi.StopWordRemover.StopWordRemoverFactory import StopWordRemoverFactory
 from Sastrawi.Stemmer.StemmerFactory import StemmerFactory
 
-df = pd.read_csv('dataset_sms_spam _v1.csv', skiprows=1, names=['Message', 'Status'])
+df = pd.read_csv('data_with_stemming.csv', skiprows=1, names=['Message', 'Status'])
 
-#regex menghilangkan simbol, link, dan kata double
-df_message = df["Message"].replace(r'http\S+', '', regex=True)\
+df_message = df["Message"].replace(r'([a-zA-Z])\1+', r'\1', regex=True)
+df_status = df["Status"]
+
+#regex menghilangkan simbol, link, dan kata double (sudah di proses terlebih dahulu dan menjadi dokumen baru)
+'''df_message = df["Message"].replace(r'http\S+', '', regex=True)\
     .replace(r'www\S+', '', regex=True)\
     .replace(r'tsel\S+', '', regex=True)\
     .replace(r'[-*#:]?([\d]+([^ ]?[a-zA-Z_/]*))+', '', regex=True)\
     .replace(r'\s([a-zA-Z])\1+\s', '', regex=True)
-df_status = df["Status"]
+df_status = df["Status"]'''
+
+#Stemming (sudah di proses terlebih dahulu dan menjadi dokumen baru)
+'''stemming = StemmerFactory().create_stemmer()
+stemming_teks = []
+stemming_label = []
+
+for i in range(len(df_message)):
+    getWord = df_message.iloc[i]
+    getLabel = df_status.iloc[i]
+    stemming_teks.append(stemming.stem(getWord))
+    stemming_label.append(getLabel)
+
+stemming_data_message = pd.DataFrame(data= stemming_teks, columns=['Teks'])
+stemming_data_status = pd.DataFrame(data= stemming_label, columns=['label'])
+
+stemming_data_document = pd.concat([stemming_data_message, stemming_data_status], axis=1)
+
+stemming_data_document.to_csv("data_with_stemming.csv")'''
 
 #membagi message sesuai dengan kelasnya
 df_message_0 = df_message[df["Status"] == 0]
@@ -41,20 +61,14 @@ df_status_test = pd.concat([status0_test, status1_test, status2_test])
 #StopWord
 idn_stopWord = StopWordRemoverFactory().get_stop_words()
 
-#Stemming
-stemming = StemmerFactory().create_stemmer()
-analyzer = CountVectorizer().build_analyzer()
-def stemmed_words(doc):
-    return (stemming.stem(w) for w in analyzer(doc))
-
-cv = TfidfVectorizer(stop_words = idn_stopWord, analyzer=stemmed_words)
+cv = TfidfVectorizer(stop_words = idn_stopWord)
 
 message_train_cv = cv.fit_transform(df_message_train)
 getFitur = cv.get_feature_names()
 a = message_train_cv.toarray()
 
 #clasification
-def cosineSimilarity (testData, trainingData):
+def cosineDistance(testData, trainingData):
     distance = 0
     penyebutCosineTest = 0
     penyebutCosineTrain = 0
@@ -66,19 +80,20 @@ def cosineSimilarity (testData, trainingData):
     distance = 1 - (pembilangCosine/(math.sqrt(penyebutCosineTest) * math.sqrt(penyebutCosineTrain)))
     return distance
 
-def kNearestNeighbor(setTestData, setTrainingData, k):
+def kNearestNeighbors(setTestData, setTrainingData, k):
     distance = []
     neighbors = []
-    #testData = 1
+    #menghitung jarak dokumen test dengan dokumen training
     for i in range(len(setTestData)):
         for j in range(len(setTrainingData)):
-            dist = cosineSimilarity(setTestData[i], setTrainingData[j])
+            dist = cosineDistance(setTestData[i], setTrainingData[j])
             distance.append((df_status_train.iloc[j], dist))
         distance.sort(key=operator.itemgetter(1))
         for l in range(k):
             neighbors.append(distance[l])
+    #vote untuk k > 1
     if k == 1 :
-        return neighbors[0][0]
+        return neighbors
     else:
         vote = {}
         for x in range(len(neighbors)):
@@ -93,9 +108,8 @@ def kNearestNeighbor(setTestData, setTrainingData, k):
 new_message = ["aku sedang sakit hari ini"]
 message_test_cv = cv.transform(new_message)
 b = message_test_cv.toarray()
-knn = kNearestNeighbor(b, a, 10)
+knn = kNearestNeighbors(b, a, 10)
 print(knn)
-
 
 '''clasification = KNeighborsClassifier(n_neighbors=3)
 message_train_clasification = clasification.fit(message_train_cv, df_status_train)
